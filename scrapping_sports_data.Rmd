@@ -1,0 +1,119 @@
+---
+title: "Scrapping Sports Data"
+author: "Faizan Khalid Mohsin"
+date: "July 18, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rvest)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+
+```
+
+
+```{r source}
+#This is from the kaggle tutorial:
+#https://www.kaggle.com/mircat/scraping-sports-data-with-r/report
+```
+
+
+```{r}
+
+url <-
+  read_html('http://www.baseball-almanac.com/teamstats/schedule.php?y=2014&t=SFN')
+
+selector_name <- '.datacolBox , .datacolBoxC , tr:nth-child(2) .banner'
+
+record <-
+  html_nodes(url, selector_name) %>%
+  html_text() %>%
+  .[-c(length(.)-1, length(.))] ## The selector name had two extra non-data cells included at the very end. This removes them
+  head(record, 20) %>% print()
+
+
+```
+
+
+```{r}
+df <- 
+  matrix(record, ncol=6, byrow=TRUE) %>%
+  as.data.frame() %>%
+  tbl_df()
+
+head(df)
+
+
+?tbl_df
+```
+
+There is still some things that need to be cleaned up. To start, the first row should be the column names.
+
+```{r}
+newNames <- gsub(' |/', '', unlist(df[1, ]))
+
+df %<>%
+  setNames(newNames) %>%
+  slice(-1)
+
+head(df)
+```
+
+The main thing of interest is to separate information contained in one column into multiple columns. For example, we might want to split the opponent column into one that spearates the location fo the game (‘at’) and the opponent, or we might want to separate score into the giants score and the opponent score. To do this, we will used the tidyr function separate.
+
+```{r}
+df %<>%
+  separate(Opponent, into=c('Location','Opponent'), sep=3) %>%
+  separate(Score, into=c('TeamScore', 'OpponentScore'), sep='-') %>%
+  separate(Record, into=c('Wins', 'Losses'), sep='-') 
+head(df)
+```
+
+More cleanup invloves stripping the team name from the opponent, leaving just the city,and mutating the location to say home and away.
+
+```{r}
+df %<>%
+  mutate(Location = ifelse(Location == 'at ', 'Away', 'Home'),
+         Opponent = gsub(' [^ ]+$', '', Opponent),
+         Wins = as.numeric(Wins),
+         Losses = as.numeric(Losses),
+         WinLossRatio = Wins/Losses
+  )
+
+head(df)
+```
+
+Finally, we adjust column types to finsih the scrape and cleanup.
+
+```{r}
+df %<>%
+  mutate(Date = as.POSIXct(strptime(DateBoxScore, '%m-%d-%Y', tz='UTC')),
+         Location = as.factor(Location),
+         Opponent = as.factor(Opponent),
+         TeamScore = as.numeric(TeamScore),
+         OpponentScore = as.numeric(OpponentScore)
+         ) %>%
+  select(Date, everything(), -DateBoxScore, -Game)
+
+df
+```
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
